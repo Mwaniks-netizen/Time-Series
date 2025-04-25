@@ -1,0 +1,435 @@
+#my walk through on chapter 7 exercises(FPP)
+
+#load the necessary library
+library(fpp3)
+
+#produce forecasts for the following series
+
+#look at the recent data
+#Drift method works well with the data
+australian_population = global_economy %>% 
+  filter(Country == 'Australia', Year>= 1980) %>% 
+  select(Country, Population,Year)
+australian_population
+
+#select the training data
+australian_train = australian_population %>% 
+  filter(Year <= 2010)
+australian_train
+
+#fit the model to the data
+australian_mable = australian_train %>% 
+  model(
+    Naive = NAIVE(Population),
+    Mean = MEAN(Population),
+    Drift = RW(Population ~ drift())
+  )
+australian_mable
+
+#produce forecasts
+australian_fable = australian_mable %>% 
+  forecast(h= 5) 
+australian_fable
+
+#check accuracy of the forecasts
+accuracy(australian_fable, australian_population) %>% 
+  arrange(.model) %>% 
+  select(-ME,-MPE,-ACF1,-Country)
+
+#2 Bricks
+bricks = aus_production %>% 
+  select(Quarter, Bricks)
+bricks
+
+#select recent data, say from 1980
+bricks_whole = bricks %>% 
+  filter(year(Quarter) >= 1980, !is.na(Bricks))
+bricks_whole
+
+#visualize
+bricks_whole %>% autoplot(Bricks)
+
+#select the training set
+bricks_training = bricks_whole %>% 
+  filter(year(Quarter) <= 2000)
+
+#fit the model to the data
+bricks_fit = bricks_training %>% 
+  model(
+    Snaive = SNAIVE(Bricks),
+    Naive = NAIVE(Bricks),
+    Drift = RW(Bricks~drift())
+  )
+bricks_fit
+
+#produce forecasts
+bricks_fc = bricks_fit %>% 
+  forecast(h = 7)
+bricks_fc
+
+#check accuracy
+accuracy(bricks_fc,bricks_whole) %>% 
+  arrange(.model) %>% 
+  select(-MPE,-ME,-ACF1)
+
+#doing diagnostics
+#Forecasting and decomposition
+#Decomposition using STL
+dcmp = bricks_whole %>% 
+  model(STL(Bricks)) %>% 
+  components() %>% 
+  select(-.model)
+dcmp
+ dcmp %>% model(
+   Naive = NAIVE(season_adjust)) %>% 
+     forecast() %>% 
+     autoplot(dcmp)
+
+ #2
+ # use the facebook stock price from gafa stock
+facebook_prices <-  gafa_stock %>% 
+   filter(Symbol == "FB") %>%
+  mutate(trading_date = row_number()) %>% 
+  update_tsibble(index = trading_date, regular = TRUE)
+facebook_prices
+
+#produce a time plot of the series
+facebook_prices %>% autoplot(Close)
+
+#fit the model to the data
+fb_fit = facebook_prices %>% 
+  model(
+    Drift = RW(Close~drift()),
+  )
+fb_fit
+augment(fb_fit)
+
+#forecast
+fb_fc = fb_fit %>% 
+  forecast(h = 4)
+fb_fc
+
+#plot the forecasts
+fb_fc %>% autoplot()
+
+#Applying seasonal naive method to Australian beer production
+# Extract data of interest
+recent_production <- aus_production |>
+  filter(year(Quarter) >= 1992)
+recent_production
+
+# Define and estimate a model
+fit <- recent_production |> model(SNAIVE(Beer))
+fit
+augment(fit)
+
+# Look at the residuals
+fit |> gg_tsresiduals()
+
+#a more formal test to check the residuals, using ljung-box test
+augment(fit) %>% 
+  features(.resid, ljung_box, lag = 10)
+
+# Look at some forecasts
+fit |> forecast() |> autoplot(recent_production)
+
+#Australian export
+au_export = global_economy %>% 
+  filter(Country == "Australia", Year >= 1992) %>% 
+  select(Country, Year, Exports)
+au_export
+
+#define and estimate a model
+au_model = au_export %>% model(NAIVE(Exports))
+au_model
+
+#look at the residuals
+fit_2 = gg_tsresiduals(au_model)
+fit_2
+
+#produce forecasts and visualize
+au_model %>%  forecast() %>% autoplot(au_export)
+aus_production
+
+#Bricks
+#Extract data of interest
+brick_resi = aus_production %>% 
+  filter(year(Quarter) >= 1992) %>% 
+  select(Bricks, Quarter)
+brick_resi
+
+#define and estimate a model
+br_model = brick_resi %>% model(SNAIVE(Bricks))
+br_model
+
+#look at the residuals
+gg_tsresiduals(br_model)
+
+br_model |> forecast() |> autoplot(brick_resi)
+
+#7
+#investigating pigs production in New South Wales
+pigs = aus_livestock %>% 
+  filter(Animal == "Pigs", State == "New South Wales")
+tail(pigs)
+
+#visualize the timeplot
+pigs %>% autoplot(Count)+
+  labs(
+    title = "Number of pigs slaughtered in New South Wales",
+    y  = "Number of pigs"
+  )
+
+#Extract the training set
+pig_training_set = pigs %>% 
+  filter(year(Month)<= 2012)
+pig_training_set
+
+#create a test set
+pig_test_set = pigs %>% 
+  filter(year(Month) >2012 & year(Month)<= 2018)
+pig_test_set
+
+#define and fit a model
+pig_mable = pig_training_set %>% 
+  model(
+    Naive = NAIVE(Count),
+    S_Naive = SNAIVE(Count),
+    Mean = MEAN(Count),
+    Drift = RW(Count ~ drift())
+  )
+pig_mable
+augment(pig_mable)
+
+#checking the residuals
+gg_tsresiduals(pig_mable)
+
+#pass mable to the forecast model
+pig_fable = pig_mable %>% 
+  forecast(h = 12)
+pig_fable
+pig_fable %>% autoplot(pig_fable, pigs)
+
+#check accuracy
+accuracy(pig_fable, pigs) %>% 
+  select(-MPE, -ACF1, -ME)
+
+#check the residuals of drift model
+drift_pigs = pig_training_set %>% 
+  model(
+    Drift = RW(Count ~ drift())
+  )
+drift_pigs
+augment(drift_pigs)
+
+#check the residuals
+gg_tsresiduals(drift_pigs)
+
+#household wealth
+#The full dataset
+household_whole = hh_budget
+household_whole
+
+#create training set
+household_training = household_whole %>% 
+  filter(Year < 2013, Country == 'Canada') 
+household_training 
+
+#define and fit model to data
+household_model = household_training %>% 
+  model(
+    Naive = NAIVE(Wealth),
+    Mean = MEAN(Wealth),
+    Drift = RW(Wealth ~ drift())
+  )
+household_model  
+augment(household_model)
+
+#produce forecasts
+household_forecasts = household_model %>% 
+  forecast(h = 4)
+household_forecasts
+
+#check the accuracy of the forecasts
+accuracy(household_forecasts, household_whole) %>% 
+  select(-ME, -ACF1, - MPE)
+
+#check the residuals of the best model
+best_model = household_training %>% 
+  model(
+    Drift = RW(Wealth ~ drift())
+  )
+best_model
+augment(best_model)
+
+#check residuals to see if they resemble white noise
+gg_tsresiduals(best_model)
+
+#bricks in aus
+bricks = aus_production %>% 
+  select(Bricks, Quarter) %>% 
+  filter(year(Quarter) <= 2005, !is.na(Bricks))
+bricks
+tail(bricks)
+
+#STL decomposition with robust set to True
+bricks_dcmp = bricks %>% 
+  model( stld = decomposition_model(
+    STL(Bricks~trend(window = 7), robust = TRUE),
+    NAIVE(season_adjust)))
+bricks_dcmp
+
+#decomposition forecasrs
+bricks_dcmp %>% 
+  forecast(h = 4) %>% 
+  autoplot()
+
+#checking the residuals
+gg_tsresiduals(bricks_dcmp)
+  forecast() %>% 
+  autoplot(bricks)
+bricks_dcmp
+
+#decomposition
+normal = bricks %>% 
+  model(STL(Bricks)) %>% 
+  components() %>% 
+  select(-.model)
+normal
+
+#fit a naive model to the seasonally adjusted data
+normal_mable = normal %>% 
+  model(
+    Naive = NAIVE(season_adjust)
+  )
+normal_mable
+augment(normal_mable)
+
+#produce forecasts
+normal_forecasts = normal_mable %>% 
+  forecast(h = 4)
+normal_forecasts
+normal_forecasts %>% autoplot()
+view(normal_forecasts)
+
+#check residuals
+gg_tsresiduals(normal_mable)
+
+#comparing decomposition and snaive forecasts
+#Decomposition
+#extract the training set
+bricks_train = bricks %>% 
+  filter(year(Quarter)<2003)
+bricks_train
+
+#assign the test set
+bricks_test = bricks %>% filter(
+  year(Quarter)<= 2005 & year(Quarter)> 2003)
+bricks_test
+
+#fit a model to the data
+bricks_dcmp = bricks_train %>% model(
+  stlf = decomposition_model(
+    STL(Bricks~trend(window = 7), robust = TRUE),
+    Naive = NAIVE(season_adjust)
+  )
+)
+bricks_dcmp
+
+#pass the mable to the forecast function
+bricks_forecast = bricks_dcmp %>% 
+  forecast(h = 10)
+bricks_forecast %>% autoplot(bricks)
+
+#check accuracy
+accuracy(bricks_forecast,bricks) %>% 
+  select(-ME,-MPE,-ACF1)
+
+#Seasonal naive
+bricks_seasonal = bricks_train %>% 
+  model(
+    seasonal_naive = SNAIVE(Bricks)
+  )
+bricks_seasonal
+
+#pass mable to forecast
+bricks_mbs = bricks_seasonal %>% 
+  forecast(h = 10)
+bricks_mbs
+
+bricks_mbs %>% autoplot()
+
+#check accuracy
+accuracy(bricks_mbs, bricks) %>% 
+  select(-ME,-MPE,-ACF1)
+
+#Tourism
+gc_tourism = tourism %>% 
+  filter(Region == "Gold Coast", Purpose == "Holiday") %>% 
+  summarise(
+    Total_trips = sum(Trips)
+  )
+gc_tourism
+
+#training set one, exclude one year
+gc_train_1 = gc_tourism %>% 
+  filter(year(Quarter) < 2017)
+tail(gc_train_1)
+
+#training set two, exclude two years
+gc_train_2 = gc_tourism %>% 
+  filter(year(Quarter) < 2016)
+tail(gc_train_2)
+
+#training set three, exclude three years
+gc_train_3 = gc_tourism %>% 
+  filter(year(Quarter)< 2015)
+tail(gc_train_3)
+
+#forecast one year ahead for each using seasonal naive
+gc_model_1 = gc_train_1 %>% 
+  model(
+    seasonal_naive = SNAIVE(Total_trips)
+  )
+gc_model_1
+
+#produce forecasts
+gc_fc_1 = gc_model_1 %>% 
+  forecast(h = 4)
+gc_fc_1
+
+#check accuracy
+accuracy(gc_fc_1, gc_tourism) %>% 
+  select(-ME,-MPE,-ACF1)
+
+#forecast two years ahead for each using seasonal naive
+gc_model_2 = gc_train_2 %>% 
+  model(
+    seasonal_naive = SNAIVE(Total_trips)
+  )
+gc_model_2
+
+#produce forecasts
+gc_fc_2 = gc_model_2 %>% 
+  forecast(h = 8)
+gc_fc_2
+
+#check accuracy
+accuracy(gc_fc_2, gc_tourism) %>% 
+  select(-ME,-MPE,-ACF1)
+
+#model3
+gc_model_3 = gc_train_3 %>% 
+  model(
+    seasonal_naive = SNAIVE(Total_trips)
+  )
+gc_model_3
+
+#produce forecasts
+gc_fc_3 = gc_model_3 %>% 
+  forecast(h = 12)
+gc_fc_3
+
+#check accuracy
+accuracy(gc_fc_3, gc_tourism) %>% 
+  select(-ME,-MPE,-ACF1)
