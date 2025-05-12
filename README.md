@@ -1,2 +1,2 @@
 # Time-Series
-The files in this repository contain my self study of forecasting principles and practice.
+The files in this repository contain predictive modelling of Time series data
